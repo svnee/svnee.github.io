@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+path {
+  stroke:white;
+  stroke-width: 1px;
+}
+
+body {
+  font-family: Arial, sans-serif;
+}
+
+#map {
+  width: 700px;
+  height: 650px;
+  margin: auto;
+  margin-top: 25px;
+  border: 1px solid #eee;
+}
+
+.background {
+  fill: none;
+}
+
+.commune {
+  stroke: #eee;
+}
+
+div.tooltip {   
+  position: absolute;           
+  text-align: center;           
+  width: 150px;                  
+  height: 25px;                 
+  padding: 10px;             
+  font-size: 14px;     
+  background: #FFFFE0;
+  border: 1px;      
+  border-radius: 8px;           
+  pointer-events: none;         
+}  
+
+.legend {
+  font-size: 12px;
+}
+
+.circonscriptions {
+  fill: none;
+  stroke: #222;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+
+</style>
+<body>
+  <div id="map"></div>
+  
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/queue.v1.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+<script>
+
+var legend_labels = ["< 2%", "< 4.23 %" , "> 4.23 %", "> 7.00 %" , "–"]
+
+var color_domain = [0, .02, .0423, .07, 1.00]
+var ext_color_domain = [0, .02, .0423, .07, 1.00]
+var color_range = ["#FFFFFF", "red", "orange", "lightgreen", "green"]
+var color = d3.scale.threshold()
+    .domain(color_domain)
+    .range(color_range);
+
+var width = 700,
+    height = 650,
+    centered;
+
+var projection = d3.geo.albers()
+    .center([6.8, 49.37])
+    .rotate([0.75, -0.45])
+    .parallels([50, 60])
+    .scale(50000)
+    .translate([width / 2, height / 2]);
+
+var path = d3.geo.path()
+    .projection(projection);
+
+var tooltip = d3.select("body").append("div")   
+  .attr("class", "tooltip")               
+  .style("opacity", 0);
+
+var svg = d3.select("#map").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+svg.append("rect")
+    .attr("class", "background")
+    .attr("width", width)
+    .attr("height", height)
+    .on("click", clicked);
+    
+var g = svg.append("g");
+
+queue()
+    .defer(d3.json, "luxembourg.json")
+    .defer(d3.tsv, "results-piratepartei-eu.tsv")
+    .await(ready);
+
+function ready(error, lux, results) {
+  var rateById = {};
+  var nameById = {};
+  
+  results.forEach(function(d) { 
+    rateById[d.id] = +d.rate;
+    nameById[d.id] = d.commune_name;
+  });
+  
+  g.append("g")
+    .attr("id", "communes")
+    .selectAll(".commune")
+    .data(topojson.feature(lux, lux.objects.communes).features)
+    .enter().append("path")
+    .attr("class", function(d) { return "commune " + d.id + " " + d.properties.commune; })
+    .attr("d", path)
+    .style("fill", function(d) { return color(rateById[d.id]); })
+    .on("click", clicked)
+    .on("mouseover", function(d) {
+      d3.select(this).transition().duration(300).style("opacity", 1);
+      tooltip.transition().duration(300)
+      .style("opacity", 1)
+      tooltip.text(nameById[d.id] + ": " + (rateById[d.id]*100).toFixed(2) + "%")
+      .style("left", (d3.event.pageX) + "px")
+      .style("top", (d3.event.pageY -30) + "px");
+    })
+    .on("mouseout", function() {
+      d3.select(this)
+      .transition().duration(300)
+      .style("opacity", 0.8);
+      tooltip.transition().duration(300)
+      .style("opacity", 0);
+    });
+    
+    g.append("path")
+      .datum(topojson.mesh(lux, lux.objects.circonscriptions, function(a, b) { return a !== b; }))
+      .attr("class", "circonscriptions")
+      .attr("d", path);
+};
+
+
+
+function clicked(d) {
+  var x, y, k;
+
+  if (d && centered !== d) {
+    var centroid = path.centroid(d);
+    x = centroid[0];
+    y = centroid[1];
+    k = 4;
+    centered = d;
+  } else {
+    x = width / 2;
+    y = height / 2;
+    k = 1;
+    centered = null;
+  }
+
+  g.selectAll("path")
+      .classed("active", centered && function(d) { return d === centered; });
+
+  g.transition()
+      .duration(750)
+      .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")scale(" + k + ")translate(" + -x + "," + -y + ")")
+      .style("stroke-width", 1.5 / k + "px");
+}
+
+//Adding legend for our Choropleth
+
+var legend = svg.selectAll("g.legend")
+.data(ext_color_domain)
+.enter().append("g")
+.attr("class", "legend");
+
+var ls_w = 20, ls_h = 20;
+
+legend.append("rect")
+.attr("x", 20)
+.attr("y", function(d, i){ return height - (i*ls_h) - 2*ls_h;})
+.attr("width", ls_w)
+.attr("height", ls_h)
+.style("fill", function(d, i) { return color(d); })
+.style("opacity", 0.8);
+
+legend.append("text")
+.attr("x", 50)
+.attr("y", function(d, i){ return height - (i*ls_h) - ls_h - 4;})
+.text(function(d, i){ return legend_labels[i]; });
+
+</script>
