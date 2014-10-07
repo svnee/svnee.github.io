@@ -101,7 +101,7 @@ var g = svg.append("g");
 
 queue()
     .defer(d3.json, "luxembourg.json")
-    .defer(d3.tsv, "results-piratepartei.tsv")
+    .defer(d3.tsv, "center.tsv")
     .await(ready);
 
 function ready(error, lux, results) {
